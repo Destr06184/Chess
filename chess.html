@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess against the machine</title>
+    <link rel="stylesheet" href="chessboard-1.0.0.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+            background-color: #3e3e3e;
+            color: #e0e0e0;
+        }
+        .game-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 25px;
+        }
+        #myBoard {
+            width: 450px;
+            border: 2px solid #2c2c2c;
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 15px;
+            background-color: #4a4a4a;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        .controls label, .controls button, .controls select, .controls p {
+            font-size: 16px;
+        }
+        .controls select, .controls button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #5a5a5a;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .controls button:hover {
+            background-color: #6a6a6a;
+        }
+        .controls select {
+            -webkit-appearance: none; -moz-appearance: none; appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23e0e0e0%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.4-5.4-12.8z%22%2F%3E%3C%2Fsvg%3E');
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 12px;
+            padding-right: 30px;
+        }
+
+        #status { margin-top: 20px; font-size: 19px; font-weight: bold; min-height: 28px; color: #f0c040; }
+        #pgn-container { margin-top: 20px; width: 450px; }
+        #pgn-container h3 { margin-bottom: 5px; color: #c0c0c0; }
+        #pgn { width: 100%; height: 100px; background-color: #4a4a4a; color: #e0e0e0; border: 1px solid #2c2c2c; border-radius: 5px; padding: 8px; font-family: monospace; box-sizing: border-box; }
+        h1 { color: #e5e5e5; margin-bottom: 25px; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+
+        .highlight-last-move { box-shadow: inset 0 0 2px 3px rgba(255, 255, 0, 0.5); }
+        .highlight-selected { box-shadow: inset 0 0 2px 3px rgba(60, 179, 113, 0.7); } 
+
+        .square-55d63.highlight-possible-move::after {
+            content: ''; display: block; width: 30%; height: 30%; border-radius: 50%;
+            background: rgba(200, 200, 200, 0.3); position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); box-sizing: border-box;
+        }
+        .square-55d63.highlight-capture-move::after {
+            content: ''; display: block; width: 80%; height: 80%; border-radius: 50%;
+            border: 4px solid rgba(200, 200, 200, 0.3); position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); box-sizing: border-box;
+        }
+        .text-piece {
+            font-size: 38px; 
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none; 
+            color: #1c1c1c; 
+        }
+        .text-piece.light { color: #f0f0f0; }
+        .square-55d63 img.hidden-piece { display: none !important; }
+
+    </style>
+</head>
+<body>
+
+    <h1>Chess against the machine</h1>
+
+    <div class="game-container">
+        <div id="myBoard" style="cursor: pointer;"></div>
+        <div class="controls">
+            <label for="difficulty">Уровень сложности:</label>
+            <select id="difficulty">
+                <option value="1">1 (Новичок)</option>
+                <option value="2" selected>2 (Легко)</option>
+                <option value="3">3 (Средне)</option>
+                <option value="4">4 (Сложно)</option>
+                <option value="5">5 (Эксперт)</option>
+            </select>
+            <button id="resetButton">Новая игра</button>
+            <button id="undoButton">Отменить ход</button>
+            <button id="togglePiecesButton">Текст/Картинки</button>
+            <p>Вы играете за: <b id="playerColor">Белых</b></p>
+        </div>
+    </div>
+
+    <div id="status">Выберите уровень и сделайте ход.</div>
+    <div id="pgn-container">
+        <h3>История ходов (PGN):</h3>
+        <textarea id="pgn" readonly></textarea>
+    </div>
+    <div id="log-container" style="margin-top: 20px; width: 450px;">
+        <h3>История Игр:</h3>
+        <button id="showLogButton">Показать/Скрыть историю</button>
+        <div id="gameLog" style="display: none; margin-top: 10px; padding: 10px; background-color: #4a4a4a; border: 1px solid #2c2c2c; border-radius: 5px; max-height: 200px; overflow-y: auto;">
+            <p>История игр будет здесь.</p>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+    <script>
+        let board = null;
+        const game = new Chess();
+        let currentDifficulty = 2;
+        let playerColor = 'w';
+        let selectedSquare = null;
+        let displayMode = 'image';
+    let gameLogArray = []; // game logs
+
+        const pieceValue = { 'p': 100, 'n': 320, 'b': 330, 'r': 500, 'q': 900, 'k': 20000 };
+        const unicodePieces = {
+            'wP': '♙', 'wN': '♘', 'wB': '♗', 'wR': '♖', 'wQ': '♕', 'wK': '♔',
+            'bP': '♟', 'bN': '♞', 'bB': '♝', 'bR': '♜', 'bQ': '♛', 'bK': '♚'
+        };
+
+    // Logging
+        function loadGameLog() {
+            const storedLog = localStorage.getItem('chessGameLog');
+            if (storedLog) {
+                try {
+                    gameLogArray = JSON.parse(storedLog);
+                    if (!Array.isArray(gameLogArray)) gameLogArray = [];
+                } catch (e) {
+                    console.error("Error parsing game log from localStorage:", e);
+                    gameLogArray = [];
+                }
+            }
+            renderGameLog();
+        }
+
+        function saveGameLog() { try { localStorage.setItem('chessGameLog', JSON.stringify(gameLogArray)); } catch (e) { console.error("Error saving game log to localStorage:", e); } }
+
+        function addGameToLog(result, pgn) {
+            const now = new Date();
+            const logEntry = { date: now.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }), difficulty: currentDifficulty, result: result, pgn: pgn };
+            gameLogArray.unshift(logEntry);
+            if (gameLogArray.length > 50) gameLogArray.pop();
+            saveGameLog(); renderGameLog();
+        }
+
+        function renderGameLog() {
+            const logDiv = $('#gameLog');
+            if (!gameLogArray || gameLogArray.length === 0) { logDiv.html('<p>No saved games.</p>'); return; }
+            let html = '<ul style="list-style:none;padding-left:0;">';
+            gameLogArray.forEach(entry => {
+                let resultColor = '#e0e0e0';
+                if (entry.result === "Победа") resultColor = "#90ee90";
+                else if (entry.result === "Поражение") resultColor = "#f08080";
+                html += `<li style="margin-bottom:10px;border-bottom:1px solid #5a5a5a;padding-bottom:8px;">
+                            <strong>Дата:</strong> ${entry.date}<br>
+                            <strong>Сложность:</strong> ${entry.difficulty} | 
+                            <strong>Результат:</strong> <span style="color:${resultColor};font-weight:bold;">${entry.result}</span><br>
+                            <details style="margin-top:4px;"><summary style="cursor:pointer;color:#f0c040;font-size:0.9em;">PGN</summary>
+                                <textarea readonly style="width:95%;height:60px;margin-top:5px;background-color:#3a3a3a;color:#d0d0d0;border:1px solid #505050;font-size:0.85em;resize:vertical;">${entry.pgn}</textarea>
+                            </details>
+                         </li>`;
+            });
+            html += '</ul>';
+            logDiv.html(html);
+        }
+        
+    // Helpers
+        function removeAllHighlights() {
+            $('#myBoard .square-55d63').removeClass('highlight-last-move highlight-selected highlight-possible-move highlight-capture-move');
+        }
+        function highlightLastMove(from, to) {
+            $('#myBoard .square-55d63').removeClass('highlight-last-move');
+            if (from) $(`#myBoard .square-${from}`).addClass('highlight-last-move');
+            if (to) $(`#myBoard .square-${to}`).addClass('highlight-last-move');
+        }
+        function highlightSelectedSquare(square) {
+            $(`#myBoard .square-${square}`).addClass('highlight-selected');
+        }
+        function highlightPossibleMoves(sourceSquare) {
+            const moves = game.moves({ square: sourceSquare, verbose: true });
+            if (moves.length === 0) return;
+            moves.forEach(move => {
+                const $targetSquare = $('#myBoard .square-' + move.to);
+                if (move.flags.includes('c') || move.flags.includes('e')) {
+                    $targetSquare.addClass('highlight-capture-move');
+                } else {
+                    $targetSquare.addClass('highlight-possible-move');
+                }
+            });
+        }
+
+    function updatePieceAppearance() { // update piece display
+            $('.text-piece').remove(); 
+            if (displayMode === 'text') {
+                $('#myBoard .square-55d63 img').addClass('hidden-piece');
+                const currentBoardState = game.board();
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        const squareData = currentBoardState[r][c];
+                        if (squareData) {
+                            const squareName = String.fromCharCode('a'.charCodeAt(0) + c) + (8 - r);
+                            const pieceKey = squareData.color + squareData.type.toUpperCase();
+                            const unicodeChar = unicodePieces[pieceKey];
+                            if (unicodeChar) {
+                                const $squareEl = $(`#myBoard .square-${squareName}`);
+                                const pieceColorClass = squareData.color === 'w' ? 'light' : '';
+                                $squareEl.append(`<span class="text-piece ${pieceColorClass}">${unicodeChar}</span>`);
+                            }
+                        }
+                    }
+                }
+            } else { 
+                $('#myBoard .square-55d63 img').removeClass('hidden-piece');
+            }
+        }
+
+        function handleSquareClick(squareName) {
+            if (game.game_over() || game.turn() !== playerColor) { if (selectedSquare) { removeAllHighlights(); const history = game.history({verbose: true}); if (history.length > 0) highlightLastMove(history[history.length-1].from, history[history.length-1].to); } selectedSquare = null; return; }
+            const pieceData = game.get(squareName);
+            if (!selectedSquare) {
+                if (pieceData && pieceData.color === playerColor) {
+                    selectedSquare = squareName;
+                    removeAllHighlights();
+                    highlightSelectedSquare(squareName);
+                    highlightPossibleMoves(squareName);
+                }
+            } else {
+                const isPossibleMoveTarget = $(`#myBoard .square-${squareName}`).hasClass('highlight-possible-move') ||
+                                             $(`#myBoard .square-${squareName}`).hasClass('highlight-capture-move');
+                if (selectedSquare === squareName) { 
+                    selectedSquare = null;
+                    removeAllHighlights();
+                    const history = game.history({verbose: true});
+                    if (history.length > 0) highlightLastMove(history[history.length-1].from, history[history.length-1].to);
+                    return;
+                }
+                if (isPossibleMoveTarget) {
+                    let move = null;
+                    try {
+                        move = game.move({ from: selectedSquare, to: squareName, promotion: 'q' });
+                    } catch (e) { }
+                    if (move) {
+                        board.position(game.fen());
+                        updatePieceAppearance(); 
+                        removeAllHighlights();
+                        highlightLastMove(move.from, move.to);
+                        updateStatus();
+                        selectedSquare = null;
+                        if (!game.game_over()) {
+                            window.setTimeout(makeComputerMove, 250);
+                        }
+                    } else { 
+                        selectedSquare = null;
+                        removeAllHighlights();
+                        const history = game.history({verbose: true});
+                        if (history.length > 0) highlightLastMove(history[history.length-1].from, history[history.length-1].to);
+                    }
+                } else if (pieceData && pieceData.color === playerColor) {
+                    selectedSquare = squareName;
+                    removeAllHighlights();
+                    highlightSelectedSquare(squareName);
+                    highlightPossibleMoves(squareName);
+                } else {
+                    selectedSquare = null;
+                    removeAllHighlights();
+                    const history = game.history({verbose: true});
+                    if (history.length > 0) highlightLastMove(history[history.length-1].from, history[history.length-1].to);
+                }
+            }
+        }
+
+        function makeComputerMove() {
+             if (game.game_over()) return;
+            const possibleMoves = game.moves({ verbose: true });
+            if (possibleMoves.length === 0) { updateStatus(); return; }
+            let bestMove = null;
+            if (currentDifficulty == 1) {
+                bestMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+            } else {
+                let depth = 1; 
+                if (currentDifficulty == 3) depth = 2;
+                if (currentDifficulty == 4) depth = 2;
+                if (currentDifficulty == 5) depth = 3;
+                let bestValue = -Infinity;
+                const computerColor = playerColor === 'w' ? 'b' : 'w';
+                for (let i = 0; i < possibleMoves.length; i++) {
+                    const move = possibleMoves[i];
+                    game.move(move.san);
+                    let value = minimax(depth - 1, game, -Infinity, Infinity, false, computerColor);
+                    game.undo();
+                    if (value > bestValue) {
+                        bestValue = value;
+                        bestMove = move;
+                    }
+                }
+            }
+            if (!bestMove && possibleMoves.length > 0) { 
+                 bestMove = possibleMoves[Math.floor(Math.random() * possibleMoves.length)];
+            }
+            if(bestMove) {
+                const moveResult = game.move(bestMove.san);
+                if (moveResult) { 
+                    board.position(game.fen());
+                    updatePieceAppearance(); 
+                    removeAllHighlights(); 
+                    highlightLastMove(moveResult.from, moveResult.to);
+                }
+            }
+            updateStatus();
+        }
+        
+        function minimax(depth, gameInstance, alpha, beta, isMaximizingPlayer, aiColor) {
+            if (depth === 0 || gameInstance.game_over()) {
+                return evaluateBoard(gameInstance.board(), aiColor);
+            }
+            const possibleMoves = gameInstance.moves({ verbose: true });
+            if (isMaximizingPlayer) {
+                let maxEval = -Infinity;
+                for (let i = 0; i < possibleMoves.length; i++) {
+                    gameInstance.move(possibleMoves[i].san);
+                    let currentEval = minimax(depth - 1, gameInstance, alpha, beta, false, aiColor);
+                    gameInstance.undo();
+                    maxEval = Math.max(maxEval, currentEval);
+                    alpha = Math.max(alpha, currentEval);
+                    if (beta <= alpha) break;
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (let i = 0; i < possibleMoves.length; i++) {
+                    gameInstance.move(possibleMoves[i].san);
+                    let currentEval = minimax(depth - 1, gameInstance, alpha, beta, true, aiColor);
+                    gameInstance.undo();
+                    minEval = Math.min(minEval, currentEval);
+                    beta = Math.min(beta, currentEval);
+                    if (beta <= alpha) break;
+                }
+                return minEval;
+            }
+        }
+
+        function evaluateBoard(currentBoard, aiColor) {
+            let totalEvaluation = 0;
+            for (let i = 0; i < 8; i++) {
+                for (let j = 0; j < 8; j++) {
+                    const piece = currentBoard[i][j];
+                    if (piece) {
+                        const value = pieceValue[piece.type] || 0;
+                        let positionBonus = 0;
+                        if (piece.type === 'p') {
+                            if (piece.color === aiColor) { 
+                                if ( (piece.color === 'w' && (i === 3 || i === 4)) || (piece.color === 'b' && (i === 3 || i === 4)) ) {
+                                    if (j === 3 || j === 4) positionBonus += 10; 
+                                }
+                            }
+                        }
+                        totalEvaluation += (piece.color === aiColor ? (value + positionBonus) : -(value + positionBonus));
+                    }
+                }
+            }
+            return totalEvaluation;
+        }
+
+        function updateStatus() {
+            let status = '';
+            const moveColor = game.turn() === 'b' ? 'Черных' : 'Белых';
+            const playerPlayingAs = playerColor === 'w' ? 'Белыми' : 'Черными';
+            let gameResultForLog = null;
+
+            if (game.in_checkmate()) {
+                status = `Игра окончена, ${moveColor} получили мат.`;
+                if (game.turn() === playerColor) { 
+                    gameResultForLog = "Поражение";
+                } else { 
+                    gameResultForLog = "Победа";
+                }
+            } else if (game.in_draw()) {
+                status = 'Игра окончена, ничья.';
+                gameResultForLog = "Ничья (общая)";
+            } else if (game.in_stalemate()) {
+                status = 'Игра окончена, пат.';
+                 gameResultForLog = "Ничья (пат)";
+            } else if (game.insufficient_material()){
+                status = 'Игра окончена, ничья (недостаточно материала).';
+                gameResultForLog = "Ничья (недостаточно материала)";
+            } else if (game.in_threefold_repetition()){
+                 status = 'Игра окончена, ничья (троекратное повторение).';
+                 gameResultForLog = "Ничья (троекратное повторение)";
+            } else {
+                status = `Ход ${moveColor}.`;
+                if (game.in_check()) {
+                     status += ` ${game.turn() === playerColor ? moveColor : playerPlayingAs} под шахом.`;
+                }
+            }
+            $('#status').html(status);
+            $('#pgn').val(game.pgn());
+            $('#pgn').scrollTop($('#pgn')[0].scrollHeight);
+
+            if (gameResultForLog) {
+                const currentPgn = game.pgn();
+                if (currentPgn && (gameLogArray.length === 0 || gameLogArray[0].pgn !== currentPgn)) addGameToLog(gameResultForLog, currentPgn);
+            }
+        }
+
+        function resetGame() { // reset
+            game.reset(); selectedSquare = null; board.position(game.fen()); updatePieceAppearance(); removeAllHighlights(); $('#pgn').val(''); updateStatus(); $('#status').html('Выберите уровень и сделайте ход.');
+        }
+
+        $(document).ready(function() {
+            loadGameLog(); 
+
+            const config = {
+				position: 'start',
+                pieceTheme: 'img/chesspieces/wikipedia/{piece}.png', // local images
+				appearSpeed: 4, 
+				moveSpeed: 4,   
+				snapSpeed: 4,   
+			};
+            board = Chessboard('myBoard', config);
+            $(window).resize(function(){ board.resize(); });
+
+            updateStatus();
+            updatePieceAppearance(); 
+
+            $('#myBoard').on('click', '.square-55d63', function() {
+                const squareName = $(this).data('square');
+                handleSquareClick(squareName);
+            });
+
+            $('#difficulty').change(function() {
+                currentDifficulty = parseInt($(this).val());
+                $('#status').html(`Уровень сложности изменен на ${currentDifficulty}. Сделайте ход или начните новую игру.`);
+            });
+            $('#resetButton').click(resetGame);
+            $('#undoButton').click(function() {
+                if (selectedSquare) {
+                    removeAllHighlights(); selectedSquare = null;
+                }
+                let undidMovesCount = 0;
+                if (game.turn() === playerColor && game.history().length > 0) {
+                    const lastHistoryMove = game.history({verbose: true}).slice(-1)[0];
+                    if (lastHistoryMove && lastHistoryMove.color !== playerColor) {
+                        game.undo();
+                        undidMovesCount++;
+                    }
+                }
+                if (game.history().length > 0) {
+                     const lastHistoryMove = game.history({verbose: true}).slice(-1)[0];
+                     if (lastHistoryMove && lastHistoryMove.color === playerColor) {
+                        game.undo();
+                        undidMovesCount++;
+                     }
+                }
+                
+                if (undidMovesCount > 0) {
+                    board.position(game.fen());
+                    updatePieceAppearance(); 
+                    removeAllHighlights();
+                    const history = game.history({verbose: true});
+                    if (history.length > 0) {
+                        const lastMove = history[history.length -1];
+                        highlightLastMove(lastMove.from, lastMove.to);
+                    }
+                    updateStatus();
+                } else {
+                    $('#status').html('Нет ходов для отмены.');
+                }
+            });
+            $('#togglePiecesButton').click(function() {
+                displayMode = (displayMode === 'image') ? 'text' : 'image';
+                updatePieceAppearance(); 
+                $(this).text(displayMode === 'image' ? 'На Текст' : 'На Картинки');
+            });
+            $('#togglePiecesButton').text(displayMode === 'image' ? 'На Текст' : 'На Картинки');
+
+            $('#showLogButton').click(function() { $('#gameLog').slideToggle(); if ($('#gameLog').is(':visible')) $('#gameLog').scrollTop(0); });
+        });
+    </script>
+</body>
+</html>
